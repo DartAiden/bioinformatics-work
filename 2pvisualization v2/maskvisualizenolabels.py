@@ -105,5 +105,5 @@ for i in coords:
 
 plt.xticks([])  
 plt.yticks([])
-plt.legend(loc = 'lower center', bbox_to_anchor = (.5,-.1), ncol = len(colors)-1)
+plt.legend(loc = 'lower center', bbox_to_anchor = (.5,-.1), ncol = len(coords[0].colors)-1)
 plt.show()
