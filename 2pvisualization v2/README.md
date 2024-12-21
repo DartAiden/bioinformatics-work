@@ -1,0 +1,1 @@
+This helps visualize 2P cells using a key. First, no labels creates all the cells and writes them to a file, enabling you to visualize them easily and select which ones you want to color. Then, you can adjust the categories of the cells. The colors can be adjusted in the dictionary in the no labels file. 
