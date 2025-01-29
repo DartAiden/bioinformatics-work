@@ -1,84 +1,100 @@
-import PySide6
-from PySide6.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QGridLayout, QComboBox, QLabel
-from PySide6.QtCore import QSize, Qt, QEventLoop, QThread, Signal
-from PySide6 import QtSerialPort, QtTest
-from PySide6.QtSerialPort import QSerialPortInfo
-import cam
-from PIL import Image,ImageOps
-import io
-
-from PySide6.QtGui import QPixmap, QImage
-
-import cam
+from PyQt5 import QtMultimedia
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QGridLayout, QComboBox, QLabel, QLineEdit
+from PyQt5.QtCore import QSize, Qt, QEventLoop, QThread
+import cv2 as cv
+from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtMultimedia import QCamera, QCameraImageCapture, QCameraInfo
+from PyQt5.QtMultimediaWidgets import QCameraViewfinder
+import cvanalysis
 class MainWindow(QMainWindow):
-    
-    class Cam(QThread):
-        image_signal = Signal(QPixmap)
-        def __init__(self, camer, parent):
-            super().__init__(parent)
-            self.camer = camer
-            self.parent = parent
-
-            self.image = cam.pull(self.camer)
-        def run(self):
-            while True:
-                self.image = cam.pull(self.camer)
-                self.pixer = Image.open(io.BytesIO(self.image))
-                self.pixer = ImageOps.invert(self.pixer)
-                self.pixer.save("saver.jpg")
-                qimage = QImage(self.pixer.tobytes(), self.pixer.width, self.pixer.height, QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(qimage)
-                #self.image_signal.emit(pixmap)
-                QtTest.QTest.qWait(100)
-
 
     def __init__(self):
-        def updateThread(self,camer):
-            self.camthread.camer = camer
-
-        
         super().__init__()
+        def oncamchange():    
+            if self.camera:
+                self.camera.stop()  
+                self.camera.deleteLater()
+
+            self.camera = QCamera(self.qcams[(self.cams.currentIndex())])
+
+            self.camera.start()
+            self.camera.setViewfinder(self.vfinder)
+
+
         layout = QGridLayout()
 
-        layout.setContentsMargins(0,0,0,0)
-        layout.setSpacing(20)
+        layout.setContentsMargins(10,0,10,0)
+        layout.setSpacing(10)
         self.setWindowTitle("Place Preference")
-        self.setFixedSize(QSize(1200, 900))
-        try:
-            #self.feed = QtSerialPort.QSerialPort(self.cams.currentText(), baudRate = 9600, readyRead = True)
-                        
-            self.cams = QComboBox()
-            camlist = QSerialPortInfo().availablePorts()
-            camlist = ['COM1','COM2']
-            self.cams.count = len(camlist)
-            self.cams.editable = False
-            self.cams.addItems(camlist)
-            layout.addWidget(self.cams, 0, 0)
-            
-            self.camthread = self.Cam(self.cams.currentText(),self)
-            self.camthread.start()
-            self.cams.currentTextChanged.connect(self.updateThread)
-        except:
+        self.setFixedSize(QSize(1200, 900))                        
+        self.setStyleSheet("background : white;") 
 
-         #   self.label = QLabel()
-          #  self.label.setText("No available ports!")
-           # layout.addWidget(self.label, 0, 0)
-           print("Err")
-        self.currentcam = "COM1"
-        self.launch = QPushButton("Launch")
+                
+        self.outputs = QComboBox()
+        self.outputlabel = QLabel("Outputs:")
+        layout.addWidget(self.outputlabel, 1,0)
+        outputlist = ['COM1','COM2', 'COM3', 'COM4']
+        self.outputs.count = len(outputlist)
+        self.outputs.editable = False
+        self.outputs.addItems(outputlist)
+        layout.addWidget(self.outputs,3,0,1,10)
+        layout.setRowStretch(2,0)
+        self.qcams = QCameraInfo.availableCameras()
+        self.camnames = []
+        for i in ((self.qcams)):
+            self.camnames.append(str(i.description()))
+
+        self.cams = QComboBox()
+        self.cams.count = len(self.cams)
+        self.cams.editable = False
+        self.cams.addItems(self.camnames)
+        self.cams.currentIndexChanged.connect(oncamchange)
+        self.camlabel = QLabel("Cams:")
+        layout.addWidget(self.cams, 7, 0,1,10)
+        layout.addWidget(self.camlabel, 5, 0,1,10)
+        layout.setRowStretch(6,0)
+        layout.setRowStretch(4,2)
+
+
+        self.txtboxlabel = QLabel("File name: (Do not include extension)")
+        self.txtbox = QLineEdit()
+        layout.addWidget(self.txtboxlabel,9,0,1,10)
+        layout.addWidget(self.txtbox,11,0,1,10)
+        layout.setRowStretch(10,0)
+        layout.setRowStretch(8,2)
+
+
+
+        self.lsronlabel = QLabel("Laser on time:")
+        self.lsronbox = QLineEdit()
+        layout.addWidget(self.lsronlabel,13,0,1,1)
+        layout.addWidget(self.lsronbox,13,1,1,1)
+        layout.setColumnStretch(9,100)
+        layout.setRowStretch(12,2)
+        layout.setRowStretch(14,2)
+
+
+        self.vfinder = QCameraViewfinder()
+        layout.addWidget(self.vfinder, 18, 0, 15, 10)
+        self.camera = QCamera((self.qcams[0]))
+        self.camera.start()
+        self.camera.setViewfinder(self.vfinder)
+
+
+        layout.setRowStretch(13,2)
+        self.lsrofflabel = QLabel("Laser off time:")
+        self.lsroffbox = QLineEdit()
+        layout.addWidget(self.lsrofflabel,15,0,1,1)
+        layout.addWidget(self.lsroffbox,15,1,1,1)
+        layout.setRowStretch(14,2)
+
+
+
+        self.launch = QPushButton("Start")
         self.launch.setCheckable(True)
         self.launch.clicked.connect(self.launchCallback)
-        layout.addWidget(self.launch, 4, 0)
-
-        self.loop = QEventLoop()
-        self.image = Image.open(r'cvis\imerror.png', 'r') 
-        self.image = ImageOps.invert(self.image)
-
-        barr = self.image.tobytes("xbm", "rgb")
-        pixmap = QPixmap(barr)
-        self.imlabel = QLabel(self)
-        self.imlabel.setPixmap(pixmap)
-        layout.addWidget(self.imlabel,2,0)
+        layout.addWidget(self.launch,40,0,1,10)
+        layout.setRowStretch(39,40)
 
 
         widget = QWidget()
@@ -86,13 +102,30 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(widget)
 
 
-    def updateThread(self, pixmap):
-        self.imlabel.setPixmap(pixmap)
-
-
     def launchCallback(self):
-        print(self.cams.currentText())
-        self.launch.setEnabled(False)
+        if self.intcheck(self.lsronbox.text()) and self.intcheck(self.lsroffbox.text()):
+            cams = cvanalysis.getcams()
+            self.launch.setEnabled(False)
+            ind = cams[self.cams.currentText()]
+            cvanalysis.anal(300, ind)
+
+
+    def intcheck(self, num):
+        if len(num) == 0:
+            return False
+        nums = ["0","1","2","3","4","5","6","7","8","9"]
+        for i in range(len(num)):
+            if num[i] not in nums:
+                return False
+        return True
+    def validname(self, name):
+        forbidden = ["<", ">", '"', ":","/", "|", "?", "*"]
+        if len(name) == 0:
+            return False
+        for i in range(len(name)):
+            if name[i] in forbidden:
+                return False
+        return True
 
 
 app = QApplication([])
