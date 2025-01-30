@@ -1,26 +1,35 @@
 from PyQt5 import QtMultimedia
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QGridLayout, QComboBox, QLabel, QLineEdit
-from PyQt5.QtCore import QSize, Qt, QEventLoop, QThread
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QGridLayout, QComboBox, QLabel, QLineEdit, QCheckBox
+from PyQt5.QtCore import QSize, Qt, QEventLoop, QThread, QTimer
 import cv2 as cv
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtMultimedia import QCamera, QCameraImageCapture, QCameraInfo
 from PyQt5.QtMultimediaWidgets import QCameraViewfinder
 import cvanalysis
+import numpy as np
+import os
+import sys
+import imfilter
+
+from pygrabber.dshow_graph import FilterGraph
 class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
         def oncamchange():    
-            if self.camera:
-                self.camera.stop()  
-                self.camera.deleteLater()
+            if self.cap:
+                self.cap.release()
 
-            self.camera = QCamera(self.qcams[(self.cams.currentIndex())])
-
-            self.camera.start()
-            self.camera.setViewfinder(self.vfinder)
+            self.cap = cv.VideoCapture(self.caminds[self.cams.currentText])
 
 
+        devices = FilterGraph().get_input_devices()
+        self.camnames = []
+        self.caminds = {}
+        for device_index, device_name in enumerate(devices):
+            self.camnames.append(str(device_index))
+            
+            self.caminds[str(device_index)] = device_index
         layout = QGridLayout()
 
         layout.setContentsMargins(10,0,10,0)
@@ -29,7 +38,6 @@ class MainWindow(QMainWindow):
         self.setFixedSize(QSize(1200, 900))                        
         self.setStyleSheet("background : white;") 
 
-                
         self.outputs = QComboBox()
         self.outputlabel = QLabel("Outputs:")
         layout.addWidget(self.outputlabel, 1,0)
@@ -39,10 +47,6 @@ class MainWindow(QMainWindow):
         self.outputs.addItems(outputlist)
         layout.addWidget(self.outputs,3,0,1,10)
         layout.setRowStretch(2,0)
-        self.qcams = QCameraInfo.availableCameras()
-        self.camnames = []
-        for i in ((self.qcams)):
-            self.camnames.append(str(i.description()))
 
         self.cams = QComboBox()
         self.cams.count = len(self.cams)
@@ -74,12 +78,6 @@ class MainWindow(QMainWindow):
         layout.setRowStretch(14,2)
 
 
-        self.vfinder = QCameraViewfinder()
-        layout.addWidget(self.vfinder, 18, 0, 15, 10)
-        self.camera = QCamera((self.qcams[0]))
-        self.camera.start()
-        self.camera.setViewfinder(self.vfinder)
-
 
         layout.setRowStretch(13,2)
         self.lsrofflabel = QLabel("Laser off time:")
@@ -89,6 +87,25 @@ class MainWindow(QMainWindow):
         layout.setRowStretch(14,2)
 
 
+        self.checked = False
+        self.filterlabel = QCheckBox()
+        self.filterlabel.setText("Filter")
+        layout.addWidget(self.filterlabel, 15, 6, 1, 1)
+        self.filterlabel.stateChanged.connect(self.checker)
+
+        self.cap = cv.VideoCapture(self.caminds[self.camnames[0]])
+        self.currentframe = QLabel()
+        layout.addWidget(self.currentframe, 20, 2, 1, 14)
+        self.defaults = {"brightness" : self.cap.get(cv.CAP_PROP_BRIGHTNESS),
+                    "saturation" : self.cap.get(cv.CAP_PROP_SATURATION),
+                    "contrast" : self.cap.get(cv.CAP_PROP_CONTRAST),
+                    "exposure" : self.cap.get(cv.CAP_PROP_EXPOSURE),
+                    "gain" : self.cap.get(cv.CAP_PROP_GAIN),
+                    "wb" : self.cap.get(cv.CAP_PROP_WB_TEMPERATURE)} 
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.readframe)
+        self.timer.start(100)
 
         self.launch = QPushButton("Start")
         self.launch.setCheckable(True)
@@ -96,19 +113,52 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.launch,40,0,1,10)
         layout.setRowStretch(39,40)
 
-
         widget = QWidget()
         widget.setLayout(layout)
         self.setCentralWidget(widget)
+    def checker(self):
+        self.checked = self.filterlabel.checkState()
 
+    def readframe(self):
+        ret,frame = self.cap.read()
+        if ret:
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+            if self.checked:
+                self.cap.set(cv.CAP_PROP_BRIGHTNESS, 0.0)
+                self.cap.set(cv.CAP_PROP_CONTRAST, 104.0)
+                self.cap.set(cv.CAP_PROP_SATURATION, 0.0)
+                self.cap.set(cv.CAP_PROP_SATURATION, 5950.0)
+
+                ret, frame = cv.threshold(frame, 127, 255, cv.THRESH_BINARY)
+
+                
+            else:
+                self.cap.set(cv.CAP_PROP_BRIGHTNESS, self.defaults["brightness"])
+                self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
+                self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
+                self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, self.defaults["wb"])
+
+
+            h, w, ch = frame.shape
+            bline = ch * w
+            start = np.array((int(w/2),h))
+            end = np.array((int(w/2),0))
+            cv.line(frame, start, end , (255,0,0), 2)
+            qimage = QImage(frame, w, h, bline, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimage)
+            self.currentframe.setPixmap(pixmap)
 
     def launchCallback(self):
-        if self.intcheck(self.lsronbox.text()) and self.intcheck(self.lsroffbox.text()):
+        if self.intcheck(self.lsronbox.text()) and self.intcheck(self.lsroffbox.text()) and self.validname(self.txtbox.text()):
+            self.lsronbox.setEnabled(False)
+            self.lsroffbox.setEnabled(False)
+            self.lsronbox.setEnabled(False)
+            self.filterlabel.setChecked(True)
+            self.filterlabel.setEnabled(False)
+            self.txtbox.setEnabled(False)
             cams = cvanalysis.getcams()
             self.launch.setEnabled(False)
-            ind = cams[self.cams.currentText()]
-            cvanalysis.anal(300, ind)
-
+            cvanalysis.anal(300, self.cap)
 
     def intcheck(self, num):
         if len(num) == 0:
@@ -127,6 +177,10 @@ class MainWindow(QMainWindow):
                 return False
         return True
 
+    def closeEvent(self, *args):
+        self.cap.set(cv.CAP_PROP_BRIGHTNESS, self.defaults["brightness"])
+        self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
+        self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
 
 app = QApplication([])
 window = MainWindow()
