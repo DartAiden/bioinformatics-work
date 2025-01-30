@@ -1,16 +1,12 @@
-from PyQt5 import QtMultimedia
+from PyQt5 import QtMultimedia, QtTest
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QGridLayout, QComboBox, QLabel, QLineEdit, QCheckBox
 from PyQt5.QtCore import QSize, Qt, QEventLoop, QThread, QTimer
 import cv2 as cv
 from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtMultimedia import QCamera, QCameraImageCapture, QCameraInfo
 from PyQt5.QtMultimediaWidgets import QCameraViewfinder
 import cvanalysis
 import numpy as np
-import os
-import sys
-import imfilter
-
+import time
 from pygrabber.dshow_graph import FilterGraph
 class MainWindow(QMainWindow):
 
@@ -22,7 +18,8 @@ class MainWindow(QMainWindow):
 
             self.cap = cv.VideoCapture(self.caminds[self.cams.currentText])
 
-
+        self.timeend = 10
+        self.refresh = 30
         devices = FilterGraph().get_input_devices()
         self.camnames = []
         self.caminds = {}
@@ -105,7 +102,7 @@ class MainWindow(QMainWindow):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.readframe)
-        self.timer.start(100)
+        self.timer.start(self.refresh)
 
         self.launch = QPushButton("Start")
         self.launch.setCheckable(True)
@@ -120,16 +117,18 @@ class MainWindow(QMainWindow):
         self.checked = self.filterlabel.checkState()
 
     def readframe(self):
-        ret,frame = self.cap.read()
+        ret,self.frame = self.cap.read()
         if ret:
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+            frame = cv.cvtColor(self.frame, cv.COLOR_BGR2RGB)
             if self.checked:
                 self.cap.set(cv.CAP_PROP_BRIGHTNESS, 0.0)
                 self.cap.set(cv.CAP_PROP_CONTRAST, 104.0)
                 self.cap.set(cv.CAP_PROP_SATURATION, 0.0)
-                self.cap.set(cv.CAP_PROP_SATURATION, 5950.0)
-
+                self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, 5950.0)
+                frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
                 ret, frame = cv.threshold(frame, 127, 255, cv.THRESH_BINARY)
+                frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
+
 
                 
             else:
@@ -138,13 +137,14 @@ class MainWindow(QMainWindow):
                 self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
                 self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, self.defaults["wb"])
 
-
             h, w, ch = frame.shape
             bline = ch * w
+
             start = np.array((int(w/2),h))
             end = np.array((int(w/2),0))
             cv.line(frame, start, end , (255,0,0), 2)
             qimage = QImage(frame, w, h, bline, QImage.Format_RGB888)
+        
             pixmap = QPixmap.fromImage(qimage)
             self.currentframe.setPixmap(pixmap)
 
@@ -156,9 +156,18 @@ class MainWindow(QMainWindow):
             self.filterlabel.setChecked(True)
             self.filterlabel.setEnabled(False)
             self.txtbox.setEnabled(False)
+            self.outputs.setEnabled(False)
             cams = cvanalysis.getcams()
             self.launch.setEnabled(False)
-            cvanalysis.anal(300, self.cap)
+            self.name = self.txtbox.text()
+            end = time.time() + self.timeend
+            runner = cvanalysis.saver(self.name, 640, 320, self.lsronbox.text(), self.lsroffbox.text(), self.outputs.currentText())
+            while time.time() < end:
+                runner.anal(self.frame)
+                QtTest.QTest.qWait(self.refresh)
+
+            runner.end()
+            self.cap.release()
 
     def intcheck(self, num):
         if len(num) == 0:
@@ -181,6 +190,8 @@ class MainWindow(QMainWindow):
         self.cap.set(cv.CAP_PROP_BRIGHTNESS, self.defaults["brightness"])
         self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
         self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
+        self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["wb"])
+
 
 app = QApplication([])
 window = MainWindow()
