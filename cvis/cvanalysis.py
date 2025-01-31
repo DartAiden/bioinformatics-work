@@ -24,7 +24,7 @@ class saver():
         self.on = on
         self.off = off
         self.output = output
-        #self.arduino = serial.Serial(port = self.output)
+        self.arduino = serial.Serial(port = self.output, baudrate=11520)
         send = str(self.on) + "," + str(self.off) + "|"
         #self.arduino.write(send.encode())
     def anal(self, frame: np.ndarray):
