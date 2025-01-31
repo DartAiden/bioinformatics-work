@@ -4,7 +4,7 @@ int lsrout = 12;
 #include <Wire.h>
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(11520);
   pinMode(lsrout, OUTPUT);
   String data = "s";
   while (data == "s"){
