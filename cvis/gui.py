@@ -22,7 +22,10 @@ class MainWindow(QMainWindow):
         def oncamchange():    
             if self.cap:
                 self.cap.release() 
-            self.cap = cv.VideoCapture(self.caminds[self.cams.currentText]) #changes the camera that is being used to capture
+            try:
+                self.cap = cv.VideoCapture(self.caminds[self.cams.currentText]) #changes the camera that is being used to capture
+            except:
+                pass
 
         self.timeend = 10 #how long the recording lasts for
         self.refresh = 1 #how often to pull the frame
@@ -96,8 +99,10 @@ class MainWindow(QMainWindow):
         self.filterlabel.setText("Filter")
         layout.addWidget(self.filterlabel, 15, 6, 1, 1)
         self.filterlabel.stateChanged.connect(self.checker)
-
-        self.cap = cv.VideoCapture(self.caminds[self.camnames[0]])
+        try:
+            self.cap = cv.VideoCapture(self.caminds[self.camnames[0]])
+        except:
+            pass
         self.currentframe = QLabel()
         layout.addWidget(self.currentframe, 20, 2, 1, 14)
         self.defaults = {"brightness" : self.cap.get(cv.CAP_PROP_BRIGHTNESS), #These save the default values of certain camera settings on OpenCV.
