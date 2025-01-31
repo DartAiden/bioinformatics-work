@@ -26,9 +26,22 @@ class MainWindow(QMainWindow):
                 self.cap = cv.VideoCapture(self.caminds[self.cams.currentText]) #changes the camera that is being used to capture
             except:
                 pass
+        def onfilter():
+            if self.filterlabel.checkState():  
+                self.cap.set(cv.CAP_PROP_BRIGHTNESS, 0.0) #Settings to imitate the original MATLAB
+                self.cap.set(cv.CAP_PROP_CONTRAST, 104.0)
+                self.cap.set(cv.CAP_PROP_SATURATION, 50)
+                self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, 5950.0) 
+                self.cap.set(cv.CAP_PROP_GAIN, 1) 
+            else:
+                self.cap.set(cv.CAP_PROP_BRIGHTNESS, self.defaults["brightness"])
+                self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
+                self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
+                self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, self.defaults["wb"])
+                self.cap.set(cv.CAP_PROP_GAIN, self.defaults["gain"])
 
         self.timeend = 10 #how long the recording lasts for
-        self.refresh = 1 #how often to pull the frame
+        self.refresh = 20 #how often to pull the frame
         devices = FilterGraph().get_input_devices()
         self.camnames = [] #strings of the camnames
         self.caminds = {} #indices of the sams
@@ -83,7 +96,7 @@ class MainWindow(QMainWindow):
         layout.setColumnStretch(9,100)
         layout.setRowStretch(12,2)
         layout.setRowStretch(14,2)
-
+        self.vid = 0
 
 
         layout.setRowStretch(13,2)
@@ -97,10 +110,12 @@ class MainWindow(QMainWindow):
         self.checked = False
         self.filterlabel = QCheckBox()
         self.filterlabel.setText("Filter")
+        self.filterlabel.stateChanged.connect(onfilter)
+        self.filterlabel.setChecked(False)
         layout.addWidget(self.filterlabel, 15, 6, 1, 1)
-        self.filterlabel.stateChanged.connect(self.checker)
         try:
             self.cap = cv.VideoCapture(self.caminds[self.camnames[0]])
+
         except:
             pass
         self.currentframe = QLabel()
@@ -111,7 +126,15 @@ class MainWindow(QMainWindow):
                     "exposure" : self.cap.get(cv.CAP_PROP_EXPOSURE),
                     "gain" : self.cap.get(cv.CAP_PROP_GAIN),
                     "wb" : self.cap.get(cv.CAP_PROP_WB_TEMPERATURE)} 
-
+        try:
+            self.cap.set(cv.CAP_PROP_BRIGHTNESS, self.defaults["brightness"])
+            self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
+            self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
+            self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["wb"])
+            self.cap.set(cv.CAP_PROP_GAIN, self.defaults["gain"])
+        except:
+            pass
+        print(self.defaults)
         self.timer = QTimer()
         self.timer.timeout.connect(self.readframe) #pulls the frame every self.refresh mses
         self.timer.start(self.refresh)
@@ -125,37 +148,34 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         widget.setLayout(layout)
         self.setCentralWidget(widget)
-    def checker(self):
-        self.checked = self.filterlabel.checkState()
-
     def readframe(self):
-        ret,self.frame = self.cap.read()
+        ret, frame = self.cap.read()
         if ret:
-            frame = cv.cvtColor(self.frame, cv.COLOR_BGR2RGB)
-            if self.checked:
-                self.cap.set(cv.CAP_PROP_BRIGHTNESS, 0.0) #Settings to imitate the original MATLAB
-                self.cap.set(cv.CAP_PROP_CONTRAST, 104.0)
-                self.cap.set(cv.CAP_PROP_SATURATION, 0.0)
-                self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, 5950.0) 
-                frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)  #converts it to grayscale
-                ret, frame = cv.threshold(frame, 127, 255, cv.THRESH_BINARY) #and then the binary black and white
-                frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB) #and then back to color
+            if self.vid != 0:
+                self.vid.write(frame)
+            if self.filterlabel.checkState():
+
+                ret,self.inter = self.cap.read()
+
+                self.inter = cv.cvtColor(self.inter, cv.COLOR_BGR2RGB)
+                self.inter = cv.cvtColor(self.inter, cv.COLOR_BGR2GRAY)  #converts it to grayscale
+                ret, self.inter = cv.threshold(self.inter, 127, 255, cv.THRESH_BINARY) #and then the binary black and white
+                self.frame = cv.cvtColor(self.inter, cv.COLOR_GRAY2RGB) #and then back to color
 
 
                 
             else:
-                self.cap.set(cv.CAP_PROP_BRIGHTNESS, self.defaults["brightness"])
-                self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
-                self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
-                self.cap.set(cv.CAP_PROP_WB_TEMPERATURE, self.defaults["wb"])
+                ret,self.inter = self.cap.read()
+                self.frame = cv.cvtColor(self.inter,cv.COLOR_BGR2RGB)
 
-            h, w, ch = frame.shape
+
+            h, w, ch = self.frame.shape
             bline = ch * w
 
             start = np.array((int(w/2),h))
             end = np.array((int(w/2),0))
-            cv.line(frame, start, end , (255,0,0), 2) #adds a midline
-            qimage = QImage(frame, w, h, bline, QImage.Format_RGB888) #converts the capture to a QImage
+            cv.line(self.frame, start, end , (255,0,0), 2) #adds a midline
+            qimage = QImage(self.frame, w, h, bline, QImage.Format_RGB888) #converts the capture to a QImage
         
             pixmap = QPixmap.fromImage(qimage) #And then a QPixmap
             self.currentframe.setPixmap(pixmap) #and then sets it
@@ -171,16 +191,31 @@ class MainWindow(QMainWindow):
             self.outputs.setEnabled(False)
             cams = cvanalysis.getcams()
             self.launch.setEnabled(False)
-            self.name = self.txtbox.text()
+            print(self.txtbox.text())
+            self.name = str(self.txtbox.text()) + ".mp4"
             end = time.time() + self.timeend
             runner = cvanalysis.saver(self.name, 640, 320, self.lsronbox.text(), self.lsroffbox.text(), self.outputs.currentText())
+            
+            fourcc = cv.VideoWriter_fourcc(*'mp4v')
+            frame_width = int(self.cap.get(cv.CAP_PROP_FRAME_WIDTH))
+            frame_height = int(self.cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+            self.vid = cv.VideoWriter(self.name, fourcc, 15.0, (frame_width,frame_height))
+
+
             while time.time() < end:
                 runner.anal(self.frame)
                 QtTest.QTest.qWait(self.refresh)
+            self.vid.release()
 
             runner.end()
-            self.cap.release()
-
+            self.lsronbox.setEnabled(True)
+            self.lsroffbox.setEnabled(True)
+            self.lsronbox.setEnabled(True)
+            self.filterlabel.setEnabled(True)
+            self.txtbox.setEnabled(True)
+            self.outputs.setEnabled(True)
+            self.launch.setEnabled(True)
+            self.vid = 0
     def intcheck(self, num): #ensures the text is an int
         num = num.strip()
         if len(num) == 0:
@@ -204,6 +239,7 @@ class MainWindow(QMainWindow):
         self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["contrast"])
         self.cap.set(cv.CAP_PROP_SATURATION, self.defaults["saturation"])
         self.cap.set(cv.CAP_PROP_CONTRAST, self.defaults["wb"])
+        self.cap.set(cv.CAP_PROP_GAIN, self.defaults["gain"])
 
 
 app = QApplication([])
